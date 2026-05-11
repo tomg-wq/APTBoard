@@ -86,6 +86,7 @@ export default function App() {
   const connected = Boolean(settings.supabaseUrl && settings.supabaseAnonKey);
   const boardDate = useMemo(function () { return new Date(settings.date + "T00:00:00"); }, [settings.date]);
   const checkedCount = rows.filter(function (r) { return r.checked_in; }).length;
+  const soldCount = rows.filter(function (r) { return r.status === "sold"; }).length;
 
   useEffect(function () { localStorage.setItem(LOCAL_SETTINGS, JSON.stringify(settings)); }, [settings]);
   useEffect(function () { localStorage.setItem(LOCAL_ROWS, JSON.stringify(rows)); }, [rows]);
@@ -255,6 +256,25 @@ export default function App() {
     }
   }
 
+  async function setDisposition(row, disposition) {
+    const nextStatus = row.status === disposition ? "pending" : disposition;
+    const now = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    const nextRows = rows.map(function (r) {
+      if (r.id !== row.id) return r;
+      return Object.assign({}, r, { status: nextStatus, checked_in: nextStatus === "sold" ? true : r.checked_in, checked_in_at: nextStatus === "sold" && !r.checked_in_at ? now : r.checked_in_at });
+    });
+    setRows(nextRows);
+    if (!connected) return;
+    try {
+      const patch = { status: nextStatus };
+      if (nextStatus === "sold") { patch.checked_in = true; patch.checked_in_at = row.checked_in_at || now; }
+      await api("dk_appointments", { method: "PATCH", query: "id=eq." + encodeURIComponent(row.id), body: patch });
+      setStatus(row.client_name + " marked " + nextStatus + ".");
+    } catch (err) {
+      setStatus("Disposition sync error: " + String(err.message || err));
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <nav className="sticky top-0 z-50 flex flex-wrap items-center gap-2 border-b border-white/10 bg-slate-950 p-3">
@@ -267,9 +287,9 @@ export default function App() {
 
       {status ? <div className="border-b border-white/10 bg-slate-900 px-4 py-2 text-sm font-bold text-amber-200">{busy ? "Working... " : ""}{status}</div> : null}
 
-      {page === "display" ? <DisplayBoard rows={rows} settings={settings} boardDate={boardDate} checkedCount={checkedCount} /> : null}
+      {page === "display" ? <DisplayBoard rows={rows} settings={settings} boardDate={boardDate} checkedCount={checkedCount} soldCount={soldCount} /> : null}
       {page === "admin" ? <AdminPage settings={settings} saveSettingsCloud={saveSettingsCloud} csvText={csvText} setCsvText={setCsvText} processCsv={processCsv} handleFile={handleFile} rows={rows} connected={connected} loadCloud={loadCloud} refreshWeather={refreshWeather} /> : null}
-      {page === "checkin" ? <CheckinPage rows={rows} toggleCheckin={toggleCheckin} boardDate={boardDate} /> : null}
+      {page === "checkin" ? <CheckinPage rows={rows} toggleCheckin={toggleCheckin} setDisposition={setDisposition} boardDate={boardDate} /> : null}
       {page === "setup" ? <SetupPage sqlSetup={sqlSetup} /> : null}
     </div>
   );
@@ -341,34 +361,34 @@ function Input({ label, value, onChange, type, placeholder }) {
   return <label className="block"><div className="mb-2 text-xs font-black uppercase tracking-widest text-slate-600">{label}</div><input type={type || "text"} value={value || ""} placeholder={placeholder || ""} onChange={function (e) { onChange(e.target.value); }} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg font-bold text-slate-950 outline-none focus:ring-4 focus:ring-amber-300" /></label>;
 }
 
-function DisplayBoard({ rows, settings, boardDate, checkedCount }) {
+function DisplayBoard({ rows, settings, boardDate, checkedCount, soldCount }) {
   const visibleRows = rows.slice(0, 24);
   const fillerRows = Array.from({ length: Math.max(0, 24 - visibleRows.length) });
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-93px)] w-full max-w-[1920px] flex-col overflow-hidden bg-white text-slate-950">
-      <div className="grid flex-1 grid-cols-[3fr_1fr]">
-        <main className="flex flex-col px-6 pt-7">
+    <div className="mx-auto flex min-h-[calc(100vh-93px)] w-screen flex-col overflow-hidden bg-white text-slate-950">
+      <div className="grid flex-1 grid-cols-[5.2fr_1.25fr]">
+        <main className="flex flex-col px-8 pt-5">
           <div className="grid grid-cols-[420px_1fr] items-center gap-8">
             <div className="border-r border-slate-300 pr-8">{settings.logoImage ? <div className="flex h-40 items-center justify-center overflow-visible"><img src={settings.logoImage} alt="Daytona Kia logo" className="max-h-40 w-[360px] max-w-full object-contain" /></div> : <><div className="text-7xl font-black tracking-[-0.12em]">KIA</div><div className="mt-2 text-3xl font-black tracking-[0.18em]">DAYTONA KIA</div><div className="mt-4 flex items-center gap-4 text-base font-bold uppercase tracking-[0.16em] text-amber-700"><span className="h-px flex-1 bg-amber-600" /> Movement That Inspires <span className="h-px flex-1 bg-amber-600" /></div></>}</div>
             <div className="text-center"><div className="text-4xl font-black uppercase tracking-[0.18em] text-amber-700">Welcome to Daytona Kia</div><div className="mt-4 text-7xl font-black uppercase tracking-[-0.03em] text-slate-950">VIP Appointments Today</div></div>
           </div>
-          <div className="mt-8 overflow-hidden rounded-xl border border-slate-200 shadow-xl">
-            <div className="grid grid-cols-[1.08fr_1.18fr_1.08fr_1.13fr] bg-slate-950 text-white"><Header label="Appointment Time" icon="◷" /><Header label="Client Name" icon="👤" /><Header label="Sales Consultant" icon="👤" /><Header label="Vehicle" icon="▰" /></div>
-            <div className="text-[22px] font-semibold tracking-wide">
-              {visibleRows.map(function (row, idx) { return <div key={row.id} className={(row.checked_in ? "bg-emerald-50" : idx % 2 ? "bg-slate-50" : "bg-white") + " grid h-[42px] grid-cols-[1.08fr_1.18fr_1.08fr_1.13fr] items-center border-b border-slate-200"}><Cell center>{row.time_display}</Cell><Cell>{row.checked_in ? <span className="mr-2 text-emerald-600">✓</span> : null}{row.client_name}</Cell><Cell center>{row.sales_consultant}</Cell><Cell center>{row.vehicle}</Cell></div>; })}
-              {fillerRows.map(function (_, idx) { return <div key={"filler-" + idx} className={(idx % 2 ? "bg-slate-50" : "bg-white") + " grid h-[42px] grid-cols-[1.08fr_1.18fr_1.08fr_1.13fr] items-center border-b border-slate-200"}><Cell /><Cell /><Cell /><Cell /></div>; })}
+          <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 shadow-xl">
+            <div className="grid grid-cols-[1.02fr_1.28fr_1.08fr_1.28fr] bg-slate-950 text-white"><Header label="Appointment Time" icon="◷" /><Header label="Client Name" icon="👤" /><Header label="Sales Consultant" icon="👤" /><Header label="Vehicle" icon="▰" /></div>
+            <div className="text-[28px] font-semibold tracking-wide">
+              {visibleRows.map(function (row, idx) { return <div key={row.id} className={(row.status === "sold" ? "bg-amber-100" : row.checked_in ? "bg-emerald-50" : idx % 2 ? "bg-slate-50" : "bg-white") + " grid h-[54px] grid-cols-[1.02fr_1.28fr_1.08fr_1.28fr] items-center border-b border-slate-200"}><Cell center>{row.time_display}</Cell><Cell>{row.status === "sold" ? <span className="mr-2 rounded bg-amber-500 px-2 py-1 text-base font-black text-white">SOLD</span> : row.checked_in ? <span className="mr-2 text-emerald-600">✓</span> : null}{row.client_name}</Cell><Cell center>{row.sales_consultant}</Cell><Cell center>{row.vehicle}</Cell></div>; })}
+              {fillerRows.map(function (_, idx) { return <div key={"filler-" + idx} className={(idx % 2 ? "bg-slate-50" : "bg-white") + " grid h-[54px] grid-cols-[1.02fr_1.28fr_1.08fr_1.28fr] items-center border-b border-slate-200"}><Cell /><Cell /><Cell /><Cell /></div>; })}
             </div>
           </div>
         </main>
-        <aside className="flex flex-col bg-slate-950 text-white"><div className="border-b border-white/20 p-8"><div className="flex items-center gap-8"><div className="text-6xl text-amber-400">◫</div><div><div className="text-3xl font-bold uppercase tracking-widest">{formatWeekday(boardDate)}</div><div className="mt-3 text-5xl font-black uppercase tracking-wider">{formatDate(boardDate)}</div></div></div></div><div className="relative flex-1 overflow-hidden bg-gradient-to-b from-slate-800 to-slate-950 p-8"><div className="flex items-center gap-8"><div className="text-7xl">{weatherIcon(settings.condition)}</div><div className="text-7xl font-black">{settings.temp}</div></div><div className="mt-4 text-2xl font-bold uppercase tracking-widest">{settings.location}</div><div className="mt-3 text-2xl font-bold uppercase tracking-widest">{settings.condition}</div><div className="mt-10 rounded-3xl bg-black/30 p-6 shadow-2xl ring-1 ring-white/10"><div className="text-sm uppercase tracking-[0.3em] text-amber-400">Live Status</div><div className="mt-4 text-5xl font-black">{checkedCount}/{rows.length}</div><div className="mt-2 text-xl font-bold uppercase tracking-widest text-white/80">Checked In</div></div><div className="absolute bottom-10 left-8 right-8 overflow-hidden rounded-3xl border border-white/10 bg-black/30 text-center shadow-xl">{settings.vehicleImage ? <img src={settings.vehicleImage} alt="Vehicle spotlight" className="h-56 w-full object-cover" /> : <div className="flex h-56 items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950 text-8xl">🚙</div>}<div className="bg-black/50 p-5 text-3xl font-black uppercase tracking-[0.2em]">{settings.vehicleSpotlight}</div></div></div></aside>
+        <aside className="flex flex-col bg-slate-950 text-white"><div className="border-b border-white/20 p-8"><div className="flex items-center gap-8"><div className="text-6xl text-amber-400">◫</div><div><div className="text-3xl font-bold uppercase tracking-widest">{formatWeekday(boardDate)}</div><div className="mt-3 text-5xl font-black uppercase tracking-wider">{formatDate(boardDate)}</div></div></div></div><div className="relative flex-1 overflow-hidden bg-gradient-to-b from-slate-800 to-slate-950 p-8"><div className="flex items-center gap-8"><div className="text-7xl">{weatherIcon(settings.condition)}</div><div className="text-7xl font-black">{settings.temp}</div></div><div className="mt-4 text-2xl font-bold uppercase tracking-widest">{settings.location}</div><div className="mt-3 text-2xl font-bold uppercase tracking-widest">{settings.condition}</div><div className="mt-10 rounded-3xl bg-black/30 p-6 shadow-2xl ring-1 ring-white/10"><div className="text-sm uppercase tracking-[0.3em] text-amber-400">Live Status</div><div className="mt-4 text-5xl font-black">{checkedCount}/{rows.length}</div><div className="mt-2 text-lg font-bold uppercase tracking-widest text-white/80">Checked In</div><div className="mt-4 text-4xl font-black text-amber-400">{soldCount}</div><div className="mt-1 text-lg font-bold uppercase tracking-widest text-white/80">Sold</div></div><div className="absolute bottom-8 left-6 right-6 overflow-hidden rounded-3xl border border-white/10 bg-black/30 text-center shadow-xl">{settings.vehicleImage ? <img src={settings.vehicleImage} alt="Vehicle spotlight" className="h-80 w-full object-cover" /> : <div className="flex h-80 items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950 text-8xl">🚙</div>}<div className="bg-black/50 p-4 text-2xl font-black uppercase tracking-[0.18em]">{settings.vehicleSpotlight}</div></div></div></aside>
       </div>
       <footer className="grid h-[130px] grid-cols-[1fr_390px] items-center bg-slate-950 px-12 text-white"><div className="flex items-center gap-8"><div className="text-6xl text-amber-500">☆</div><div className="h-16 w-px bg-amber-500" /><div><div className="text-2xl font-bold uppercase tracking-[0.12em]">Thank you for choosing Daytona Kia! Please see reception upon arrival.</div><div className="mt-3 text-3xl font-black uppercase tracking-[0.13em] text-amber-500">We look forward to serving you!</div></div></div><div className="text-center text-3xl font-black italic uppercase tracking-[0.12em]">Movement That <span className="text-amber-500">Inspires</span></div></footer>
     </div>
   );
 }
 
-function CheckinPage({ rows, toggleCheckin, boardDate }) {
-  return <main className="mx-auto max-w-6xl p-6"><div className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><div className="text-sm font-bold uppercase tracking-[0.3em] text-amber-400">Daytona Kia</div><h1 className="mt-2 text-4xl font-black">Customer Check-In</h1><p className="mt-2 text-slate-300">{formatWeekday(boardDate)} • {formatDate(boardDate)}</p></div><div className="rounded-2xl bg-white/10 px-5 py-3 font-bold">Tap a button to update the TV board</div></div><div className="grid gap-3">{rows.length === 0 ? <div className="rounded-2xl bg-white p-8 text-center text-xl font-black text-slate-950">No appointments loaded. Go to Admin Upload first.</div> : null}{rows.map(function (row) { return <div key={row.id} className={(row.checked_in ? "bg-emerald-100" : "bg-white") + " grid grid-cols-[125px_1fr_auto] items-center gap-4 rounded-2xl p-4 text-slate-950 shadow-lg"}><div className="text-2xl font-black">{row.time_display || "—"}</div><div><div className="text-2xl font-black">{row.client_name}</div><div className="mt-1 text-sm font-semibold text-slate-600">{row.sales_consultant} {row.vehicle ? "• " + row.vehicle : ""}</div></div><button type="button" onClick={function () { toggleCheckin(row); }} className={(row.checked_in ? "bg-emerald-600" : "bg-slate-950 hover:bg-slate-800") + " rounded-xl px-6 py-4 text-lg font-black text-white shadow"}>{row.checked_in ? "Checked In " + row.checked_in_at : "Check In"}</button></div>; })}</div></main>;
+function CheckinPage({ rows, toggleCheckin, setDisposition, boardDate }) {
+  return <main className="mx-auto max-w-6xl p-6"><div className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><div className="text-sm font-bold uppercase tracking-[0.3em] text-amber-400">Daytona Kia</div><h1 className="mt-2 text-4xl font-black">Customer Check-In</h1><p className="mt-2 text-slate-300">{formatWeekday(boardDate)} • {formatDate(boardDate)}</p></div><div className="rounded-2xl bg-white/10 px-5 py-3 font-bold">Tap a button to update the TV board</div></div><div className="grid gap-3">{rows.length === 0 ? <div className="rounded-2xl bg-white p-8 text-center text-xl font-black text-slate-950">No appointments loaded. Go to Admin Upload first.</div> : null}{rows.map(function (row) { return <div key={row.id} className={(row.checked_in ? "bg-emerald-100" : "bg-white") + " grid grid-cols-[125px_1fr_auto] items-center gap-4 rounded-2xl p-4 text-slate-950 shadow-lg"}><div className="text-2xl font-black">{row.time_display || "—"}</div><div><div className="text-2xl font-black">{row.client_name}</div><div className="mt-1 text-sm font-semibold text-slate-600">{row.sales_consultant} {row.vehicle ? "• " + row.vehicle : ""}</div></div><div className="flex gap-2"><button type="button" onClick={function () { toggleCheckin(row); }} className={(row.checked_in ? "bg-emerald-600" : "bg-slate-950 hover:bg-slate-800") + " rounded-xl px-5 py-4 text-lg font-black text-white shadow"}>{row.checked_in ? "Checked " + row.checked_in_at : "Check In"}</button><button type="button" onClick={function () { setDisposition(row, "sold"); }} className={(row.status === "sold" ? "bg-amber-500" : "bg-amber-700 hover:bg-amber-800") + " rounded-xl px-5 py-4 text-lg font-black text-white shadow"}>{row.status === "sold" ? "Sold ✓" : "Sold"}</button></div></div>; })}</div></main>;
 }
 
 function SetupPage({ sqlSetup }) {
@@ -409,7 +429,7 @@ function normalizeRows(rawRows, selectedDateString, boardId) {
     const apptRaw = clean(r["Appt Date"]);
     const sales = salesRaw ? titleName(salesRaw) : "VIP";
     const vehicle = titleName(r.Vehicle);
-    return { id: makeId(boardId, client, apptRaw, sales, vehicle), board_id: boardId, client_name: client, source_type: clean(r.Type), sales_consultant: sales, appt_raw: apptRaw, appt_ms: parsed ? parsed.date.getTime() : null, appt_date: parsed ? toIsoDate(parsed.year, parsed.month, parsed.day) : null, day: day, time_display: parsed ? formatTimeParts(parsed.hour, parsed.minute) : "", vehicle: vehicle, checked_in: false, checked_in_at: "", sort_order: index };
+    return { id: makeId(boardId, client, apptRaw, sales, vehicle), board_id: boardId, client_name: client, source_type: clean(r.Type), sales_consultant: sales, appt_raw: apptRaw, appt_ms: parsed ? parsed.date.getTime() : null, appt_date: parsed ? toIsoDate(parsed.year, parsed.month, parsed.day) : null, day: day, time_display: parsed ? formatTimeParts(parsed.hour, parsed.minute) : "", vehicle: vehicle, checked_in: false, checked_in_at: "", status: "pending", sort_order: index };
   }).filter(function (r) { return r.client_name; }).filter(function (r) { return r.day === target || !r.appt_ms; });
   const best = new Map();
   mapped.forEach(function (r) { const key = r.client_name.toLowerCase() + "|" + (r.appt_raw || "blank"); const old = best.get(key); if (!old || scoreRow(r) > scoreRow(old)) best.set(key, r); });
@@ -434,8 +454,8 @@ function parseApptDate(value) {
   return { date: date, year: dateBits[2], month: dateBits[0] - 1, day: dateBits[1], hour: hour, minute: minute };
 }
 
-function toDbRow(r, boardId, i) { return { id: r.id, board_id: boardId, appt_date: r.appt_date, appt_ms: r.appt_ms, appt_raw: r.appt_raw, time_display: r.time_display, client_name: r.client_name, sales_consultant: r.sales_consultant, vehicle: r.vehicle, source_type: r.source_type, checked_in: Boolean(r.checked_in), checked_in_at: r.checked_in_at || "", sort_order: i }; }
-function fromDbRow(r) { return { id: r.id, board_id: r.board_id, appt_date: r.appt_date, appt_ms: r.appt_ms, appt_raw: r.appt_raw || "", time_display: r.time_display || "", client_name: r.client_name || "", sales_consultant: r.sales_consultant || "VIP", vehicle: r.vehicle || "", source_type: r.source_type || "", checked_in: Boolean(r.checked_in), checked_in_at: r.checked_in_at || "", sort_order: r.sort_order || 0 }; }
+function toDbRow(r, boardId, i) { return { id: r.id, board_id: boardId, appt_date: r.appt_date, appt_ms: r.appt_ms, appt_raw: r.appt_raw, time_display: r.time_display, client_name: r.client_name, sales_consultant: r.sales_consultant, vehicle: r.vehicle, source_type: r.source_type, checked_in: Boolean(r.checked_in), checked_in_at: r.checked_in_at || "", status: r.status || "pending", sort_order: i }; }
+function fromDbRow(r) { return { id: r.id, board_id: r.board_id, appt_date: r.appt_date, appt_ms: r.appt_ms, appt_raw: r.appt_raw || "", time_display: r.time_display || "", client_name: r.client_name || "", sales_consultant: r.sales_consultant || "VIP", vehicle: r.vehicle || "", source_type: r.source_type || "", checked_in: Boolean(r.checked_in), checked_in_at: r.checked_in_at || "", status: r.status || "pending", sort_order: r.sort_order || 0 }; }
 function makeId(boardId, client, apptRaw, sales, vehicle) { return slug(boardId + "-" + client + "-" + (apptRaw || "blank") + "-" + sales + "-" + vehicle); }
 function slug(s) { return String(s).toLowerCase().split("").map(function (ch) { const ok = "abcdefghijklmnopqrstuvwxyz0123456789".indexOf(ch) >= 0; return ok ? ch : "-"; }).join("").replaceAll("---", "-").replaceAll("--", "-").slice(0, 180); }
 function toIsoDate(year, month, day) { return String(year) + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0"); }
