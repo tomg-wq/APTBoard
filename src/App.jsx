@@ -4,15 +4,19 @@ const LOCAL_SETTINGS = "dk_live_settings_v1";
 const LOCAL_ROWS = "dk_live_rows_v1";
 const LOCAL_CHECKINS = "dk_live_checkins_v1";
 
+const ENV_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
+const ENV_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+const ENV_BOARD_ID = import.meta.env.VITE_BOARD_ID || "daytona-kia-main";
+
 const defaultSettings = {
-  boardId: "daytona-kia-main",
+  boardId: ENV_BOARD_ID,
   date: "2026-05-11",
   temp: "80°F",
   condition: "Cloudy",
   location: "Daytona Beach, FL",
   vehicleSpotlight: "2027 Kia Telluride",
-  supabaseUrl: "",
-  supabaseAnonKey: "",
+  supabaseUrl: ENV_SUPABASE_URL,
+  supabaseAnonKey: ENV_SUPABASE_ANON_KEY,
 };
 
 const sqlSetup = `create table if not exists public.dk_board_settings (
@@ -59,7 +63,14 @@ const demoRows = [
 
 export default function App() {
   const [page, setPage] = useState("display");
-  const [settings, setSettings] = useState(function () { return readJson(LOCAL_SETTINGS, defaultSettings); });
+  const [settings, setSettings] = useState(function () {
+    const saved = readJson(LOCAL_SETTINGS, defaultSettings);
+    return Object.assign({}, saved, {
+      boardId: saved.boardId || ENV_BOARD_ID,
+      supabaseUrl: saved.supabaseUrl || ENV_SUPABASE_URL,
+      supabaseAnonKey: saved.supabaseAnonKey || ENV_SUPABASE_ANON_KEY,
+    });
+  });
   const [rows, setRows] = useState(function () { return readJson(LOCAL_ROWS, demoRows); });
   const [csvText, setCsvText] = useState("");
   const [status, setStatus] = useState("Demo mode: add Supabase URL and anon key on the Admin page to sync across computers.");
@@ -229,7 +240,7 @@ function AdminPage({ settings, saveSettingsCloud, csvText, setCsvText, processCs
         <section className="rounded-3xl bg-white p-6 text-slate-950 shadow-2xl">
           <div className="text-sm font-black uppercase tracking-[0.25em] text-amber-600">Admin</div>
           <h1 className="mt-2 text-4xl font-black">Upload CSV & Control Live Board</h1>
-          <p className="mt-2 text-slate-600">Upload the CSV here. If Supabase is connected, the TV display and check-in screen on other computers update automatically.</p>
+          <p className="mt-2 text-slate-600">Upload the CSV here. If Supabase is connected, the TV display and check-in screen on other computers update automatically. You can save Supabase credentials permanently in Vercel Environment Variables so every device connects automatically.</p>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <Input label="Board ID" value={settings.boardId} onChange={function (v) { update("boardId", v); }} />
             <Input label="Display Date" type="date" value={settings.date} onChange={function (v) { update("date", v); }} />
