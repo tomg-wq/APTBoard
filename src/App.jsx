@@ -252,9 +252,11 @@ function AdminPage({ settings, saveSettingsCloud, csvText, setCsvText, processCs
             <Input label="Location" value={settings.location} onChange={function (v) { update("location", v); }} />
             <Input label="Vehicle Spotlight" value={settings.vehicleSpotlight} onChange={function (v) { update("vehicleSpotlight", v); }} />
             <div className="sm:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <label className="block text-xs font-black uppercase tracking-widest text-slate-600">Upload Telluride / Spotlight Image</label>
+              <label className="block text-xs font-black uppercase tracking-widest text-slate-600">Telluride / Spotlight Image</label>
+              <input value={settings.vehicleImage && settings.vehicleImage.indexOf("data:image") !== 0 ? settings.vehicleImage : ""} onChange={function (e) { update("vehicleImage", e.target.value); }} placeholder="Paste image URL here, like https://example.com/telluride.jpg" className="mt-3 w-full rounded-xl border border-slate-300 bg-white p-3 font-bold text-slate-950 outline-none focus:ring-4 focus:ring-amber-300" />
+              <div className="mt-3 text-center text-xs font-black uppercase tracking-widest text-slate-400">or upload image file</div>
               <input type="file" accept="image/*" onChange={async function (e) { const file = e.target.files && e.target.files[0]; if (!file) return; const dataUrl = await fileToDataUrl(file); update("vehicleImage", dataUrl); }} className="mt-3 block w-full cursor-pointer rounded-xl border border-slate-300 bg-white p-3 font-bold text-slate-950" />
-              {settings.vehicleImage ? <div className="mt-4"><img src={settings.vehicleImage} alt="Vehicle spotlight preview" className="max-h-40 rounded-xl object-cover shadow" /><button type="button" onClick={function () { update("vehicleImage", ""); }} className="mt-3 rounded-xl bg-rose-600 px-4 py-2 font-black text-white">Remove Image</button></div> : <p className="mt-3 text-sm font-semibold text-slate-500">Use a compressed JPG/PNG. This image saves online and appears on the TV display.</p>}
+              {settings.vehicleImage ? <div className="mt-4"><img src={settings.vehicleImage} alt="Vehicle spotlight preview" className="max-h-40 rounded-xl object-cover shadow" /><button type="button" onClick={function () { update("vehicleImage", ""); }} className="mt-3 rounded-xl bg-rose-600 px-4 py-2 font-black text-white">Remove Image</button></div> : <p className="mt-3 text-sm font-semibold text-slate-500">Paste a public image URL, or upload a compressed JPG/PNG. It saves online and appears on the TV display.</p>}
             </div>
           </div>
           <div className="mt-8 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-5">
@@ -395,5 +397,10 @@ function clean(value) { return String(value == null ? "" : value).trim(); }
 function titleName(value) { const s = clean(value); if (!s) return ""; return s.toLowerCase().split(" ").map(function (word) { return word.split("-").map(function (part) { return part.charAt(0).toUpperCase() + part.slice(1); }).join("-"); }).join(" ").replace("Rav4", "RAV4").replace("Ev6", "EV6").replace("Ev9", "EV9"); }
 function rowKey(row) { return row.id; }
 function readJson(key, fallback) { try { const value = localStorage.getItem(key); return value ? JSON.parse(value) : fallback; } catch (e) { return fallback; } }
-function trimSlash(s) { return String(s || "").replace(/\/$/, ""); }
+function trimSlash(s) {
+  return String(s || "")
+    .trim()
+    .replace(/\/rest\/v1\/?$/i, "")
+    .replace(/\/$/, "");
+}
 function fileToDataUrl(file) { return new Promise(function (resolve, reject) { const reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || "")); }; reader.onerror = reject; reader.readAsDataURL(file); }); }
