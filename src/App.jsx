@@ -15,6 +15,7 @@ const defaultSettings = {
   condition: "Cloudy",
   location: "Daytona Beach, FL",
   vehicleSpotlight: "2027 Kia Telluride",
+  vehicleImage: "",
   supabaseUrl: ENV_SUPABASE_URL,
   supabaseAnonKey: ENV_SUPABASE_ANON_KEY,
 };
@@ -26,6 +27,7 @@ const sqlSetup = `create table if not exists public.dk_board_settings (
   condition text,
   location text,
   vehicle_spotlight text,
+  vehicle_image text,
   updated_at timestamptz default now()
 );
 
@@ -67,6 +69,7 @@ export default function App() {
     const saved = readJson(LOCAL_SETTINGS, defaultSettings);
     return Object.assign({}, saved, {
       boardId: saved.boardId || ENV_BOARD_ID,
+      vehicleImage: saved.vehicleImage || "",
       supabaseUrl: saved.supabaseUrl || ENV_SUPABASE_URL,
       supabaseAnonKey: saved.supabaseAnonKey || ENV_SUPABASE_ANON_KEY,
     });
@@ -114,7 +117,7 @@ export default function App() {
       const settingRows = await api("dk_board_settings", { query: "board_id=eq." + encodeURIComponent(settings.boardId) + "&limit=1" });
       if (settingRows && settingRows[0]) {
         const s = settingRows[0];
-        setSettings(function (old) { return Object.assign({}, old, { date: s.display_date || old.date, temp: s.temp || old.temp, condition: s.condition || old.condition, location: s.location || old.location, vehicleSpotlight: s.vehicle_spotlight || old.vehicleSpotlight }); });
+        setSettings(function (old) { return Object.assign({}, old, { date: s.display_date || old.date, temp: s.temp || old.temp, condition: s.condition || old.condition, location: s.location || old.location, vehicleSpotlight: s.vehicle_spotlight || old.vehicleSpotlight, vehicleImage: s.vehicle_image || old.vehicleImage || "" }); });
       }
       const appts = await api("dk_appointments", { query: "board_id=eq." + encodeURIComponent(settings.boardId) + "&order=sort_order.asc" });
       setRows((appts || []).map(fromDbRow));
@@ -135,7 +138,7 @@ export default function App() {
         method: "POST",
         query: "on_conflict=board_id",
         headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-        body: [{ board_id: nextSettings.boardId, display_date: nextSettings.date, temp: nextSettings.temp, condition: nextSettings.condition, location: nextSettings.location, vehicle_spotlight: nextSettings.vehicleSpotlight }],
+        body: [{ board_id: nextSettings.boardId, display_date: nextSettings.date, temp: nextSettings.temp, condition: nextSettings.condition, location: nextSettings.location, vehicle_spotlight: nextSettings.vehicleSpotlight, vehicle_image: nextSettings.vehicleImage || "" }],
       });
       setStatus("Settings saved online.");
     } catch (err) {
@@ -248,6 +251,11 @@ function AdminPage({ settings, saveSettingsCloud, csvText, setCsvText, processCs
             <Input label="Weather" value={settings.condition} onChange={function (v) { update("condition", v); }} />
             <Input label="Location" value={settings.location} onChange={function (v) { update("location", v); }} />
             <Input label="Vehicle Spotlight" value={settings.vehicleSpotlight} onChange={function (v) { update("vehicleSpotlight", v); }} />
+            <div className="sm:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <label className="block text-xs font-black uppercase tracking-widest text-slate-600">Upload Telluride / Spotlight Image</label>
+              <input type="file" accept="image/*" onChange={async function (e) { const file = e.target.files && e.target.files[0]; if (!file) return; const dataUrl = await fileToDataUrl(file); update("vehicleImage", dataUrl); }} className="mt-3 block w-full cursor-pointer rounded-xl border border-slate-300 bg-white p-3 font-bold text-slate-950" />
+              {settings.vehicleImage ? <div className="mt-4"><img src={settings.vehicleImage} alt="Vehicle spotlight preview" className="max-h-40 rounded-xl object-cover shadow" /><button type="button" onClick={function () { update("vehicleImage", ""); }} className="mt-3 rounded-xl bg-rose-600 px-4 py-2 font-black text-white">Remove Image</button></div> : <p className="mt-3 text-sm font-semibold text-slate-500">Use a compressed JPG/PNG. This image saves online and appears on the TV display.</p>}
+            </div>
           </div>
           <div className="mt-8 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-5">
             <label className="block text-sm font-black uppercase tracking-widest text-slate-600">Upload CSV File</label>
@@ -300,7 +308,7 @@ function DisplayBoard({ rows, settings, boardDate, checkedCount }) {
             </div>
           </div>
         </main>
-        <aside className="flex flex-col bg-slate-950 text-white"><div className="border-b border-white/20 p-8"><div className="flex items-center gap-8"><div className="text-6xl text-amber-400">◫</div><div><div className="text-3xl font-bold uppercase tracking-widest">{formatWeekday(boardDate)}</div><div className="mt-3 text-5xl font-black uppercase tracking-wider">{formatDate(boardDate)}</div></div></div></div><div className="relative flex-1 overflow-hidden bg-gradient-to-b from-slate-800 to-slate-950 p-8"><div className="flex items-center gap-8"><div className="text-7xl">☁</div><div className="text-7xl font-black">{settings.temp}</div></div><div className="mt-4 text-2xl font-bold uppercase tracking-widest">{settings.location}</div><div className="mt-3 text-2xl font-bold uppercase tracking-widest">{settings.condition}</div><div className="mt-10 rounded-3xl bg-black/30 p-6 shadow-2xl ring-1 ring-white/10"><div className="text-sm uppercase tracking-[0.3em] text-amber-400">Live Status</div><div className="mt-4 text-5xl font-black">{checkedCount}/{rows.length}</div><div className="mt-2 text-xl font-bold uppercase tracking-widest text-white/80">Checked In</div></div><div className="absolute bottom-10 left-8 right-8 rounded-3xl border border-white/10 bg-black/30 p-6 text-center shadow-xl"><div className="text-3xl font-black uppercase tracking-[0.2em]">{settings.vehicleSpotlight}</div></div></div></aside>
+        <aside className="flex flex-col bg-slate-950 text-white"><div className="border-b border-white/20 p-8"><div className="flex items-center gap-8"><div className="text-6xl text-amber-400">◫</div><div><div className="text-3xl font-bold uppercase tracking-widest">{formatWeekday(boardDate)}</div><div className="mt-3 text-5xl font-black uppercase tracking-wider">{formatDate(boardDate)}</div></div></div></div><div className="relative flex-1 overflow-hidden bg-gradient-to-b from-slate-800 to-slate-950 p-8"><div className="flex items-center gap-8"><div className="text-7xl">☁</div><div className="text-7xl font-black">{settings.temp}</div></div><div className="mt-4 text-2xl font-bold uppercase tracking-widest">{settings.location}</div><div className="mt-3 text-2xl font-bold uppercase tracking-widest">{settings.condition}</div><div className="mt-10 rounded-3xl bg-black/30 p-6 shadow-2xl ring-1 ring-white/10"><div className="text-sm uppercase tracking-[0.3em] text-amber-400">Live Status</div><div className="mt-4 text-5xl font-black">{checkedCount}/{rows.length}</div><div className="mt-2 text-xl font-bold uppercase tracking-widest text-white/80">Checked In</div></div><div className="absolute bottom-10 left-8 right-8 overflow-hidden rounded-3xl border border-white/10 bg-black/30 text-center shadow-xl">{settings.vehicleImage ? <img src={settings.vehicleImage} alt="Vehicle spotlight" className="h-56 w-full object-cover" /> : <div className="flex h-56 items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950 text-8xl">🚙</div>}<div className="bg-black/50 p-5 text-3xl font-black uppercase tracking-[0.2em]">{settings.vehicleSpotlight}</div></div></div></aside>
       </div>
       <footer className="grid h-[130px] grid-cols-[1fr_390px] items-center bg-slate-950 px-12 text-white"><div className="flex items-center gap-8"><div className="text-6xl text-amber-500">☆</div><div className="h-16 w-px bg-amber-500" /><div><div className="text-2xl font-bold uppercase tracking-[0.12em]">Thank you for choosing Daytona Kia! Please see reception upon arrival.</div><div className="mt-3 text-3xl font-black uppercase tracking-[0.13em] text-amber-500">We look forward to serving you!</div></div></div><div className="text-center text-3xl font-black italic uppercase tracking-[0.12em]">Movement That <span className="text-amber-500">Inspires</span></div></footer>
     </div>
@@ -388,3 +396,4 @@ function titleName(value) { const s = clean(value); if (!s) return ""; return s.
 function rowKey(row) { return row.id; }
 function readJson(key, fallback) { try { const value = localStorage.getItem(key); return value ? JSON.parse(value) : fallback; } catch (e) { return fallback; } }
 function trimSlash(s) { return String(s || "").replace(/\/$/, ""); }
+function fileToDataUrl(file) { return new Promise(function (resolve, reject) { const reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || "")); }; reader.onerror = reject; reader.readAsDataURL(file); }); }
