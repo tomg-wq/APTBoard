@@ -10,7 +10,7 @@ const ENV_BOARD_ID = import.meta.env.VITE_BOARD_ID || "daytona-kia-main";
 
 const defaultSettings = {
   boardId: ENV_BOARD_ID,
-  date: "2026-05-11",
+  date: todayIso(),
   temp: "80°F",
   condition: "Cloudy",
   location: "Daytona Beach, FL",
@@ -78,6 +78,7 @@ export default function App() {
   const [csvText, setCsvText] = useState("");
   const [status, setStatus] = useState("Demo mode: add Supabase URL and anon key on the Admin page to sync across computers.");
   const [busy, setBusy] = useState(false);
+  const [autoWeather, setAutoWeather] = useState(false);
 
   const connected = Boolean(settings.supabaseUrl && settings.supabaseAnonKey);
   const boardDate = useMemo(function () { return new Date(settings.date + "T00:00:00"); }, [settings.date]);
@@ -92,6 +93,46 @@ export default function App() {
     const timer = setInterval(function () { loadCloud(true); }, 4000);
     return function () { clearInterval(timer); };
   }, [connected, settings.boardId]);
+
+  useEffect(function () {
+    const timer = setInterval(function () {
+      const newDate = todayIso();
+      setSettings(function (old) { return old.date === newDate ? old : Object.assign({}, old, { date: newDate }); });
+    }, 60000);
+    return function () { clearInterval(timer); };
+  }, []);
+
+  useEffect(function () {
+    refreshWeather(false);
+    const timer = setInterval(function () { refreshWeather(true); }, 900000);
+    return function () { clearInterval(timer); };
+  }, []);
+
+  async function refreshWeather(silent) {
+    try {
+      const geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=Daytona%20Beach&count=1&language=en&format=json";
+      const geoRes = await fetch(geoUrl);
+      const geo = await geoRes.json();
+      const place = geo && geo.results && geo.results[0];
+      if (!place) return;
+      const weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=" + place.latitude + "&longitude=" + place.longitude + "&current=temperature_2m,weather_code&temperature_unit=fahrenheit";
+      const weatherRes = await fetch(weatherUrl);
+      const weather = await weatherRes.json();
+      const current = weather.current || {};
+      const next = Object.assign({}, settings, {
+        date: todayIso(),
+        temp: Math.round(Number(current.temperature_2m)) + "°F",
+        condition: weatherCodeLabel(current.weather_code),
+        location: "Daytona Beach, FL",
+      });
+      setSettings(next);
+      localStorage.setItem(LOCAL_SETTINGS, JSON.stringify(next));
+      if (connected) await saveSettingsCloud(next);
+      if (!silent) setStatus("Date and weather updated automatically.");
+    } catch (err) {
+      if (!silent) setStatus("Weather update failed. You can still enter weather manually.");
+    }
+  }
 
   async function api(table, params) {
     const url = trimSlash(settings.supabaseUrl) + "/rest/v1/" + table + (params && params.query ? "?" + params.query : "");
@@ -224,7 +265,7 @@ export default function App() {
       {status ? <div className="border-b border-white/10 bg-slate-900 px-4 py-2 text-sm font-bold text-amber-200">{busy ? "Working... " : ""}{status}</div> : null}
 
       {page === "display" ? <DisplayBoard rows={rows} settings={settings} boardDate={boardDate} checkedCount={checkedCount} /> : null}
-      {page === "admin" ? <AdminPage settings={settings} saveSettingsCloud={saveSettingsCloud} csvText={csvText} setCsvText={setCsvText} processCsv={processCsv} handleFile={handleFile} rows={rows} connected={connected} loadCloud={loadCloud} /> : null}
+      {page === "admin" ? <AdminPage settings={settings} saveSettingsCloud={saveSettingsCloud} csvText={csvText} setCsvText={setCsvText} processCsv={processCsv} handleFile={handleFile} rows={rows} connected={connected} loadCloud={loadCloud} refreshWeather={refreshWeather} /> : null}
       {page === "checkin" ? <CheckinPage rows={rows} toggleCheckin={toggleCheckin} boardDate={boardDate} /> : null}
       {page === "setup" ? <SetupPage sqlSetup={sqlSetup} /> : null}
     </div>
@@ -235,7 +276,7 @@ function Tab({ active, onClick, children }) {
   return <button type="button" onClick={onClick} className={(active ? "bg-amber-400 text-slate-950" : "bg-white/10 text-white hover:bg-white/20") + " rounded-xl px-4 py-2 text-sm font-black shadow"}>{children}</button>;
 }
 
-function AdminPage({ settings, saveSettingsCloud, csvText, setCsvText, processCsv, handleFile, rows, connected, loadCloud }) {
+function AdminPage({ settings, saveSettingsCloud, csvText, setCsvText, processCsv, handleFile, rows, connected, loadCloud, refreshWeather }) {
   function update(name, value) { saveSettingsCloud(Object.assign({}, settings, { [name]: value })); }
   return (
     <main className="mx-auto max-w-7xl p-6">
@@ -267,6 +308,7 @@ function AdminPage({ settings, saveSettingsCloud, csvText, setCsvText, processCs
           <div className="mt-6 flex flex-wrap gap-3">
             <button type="button" onClick={function () { if (csvText.trim()) processCsv(csvText); }} className="rounded-xl bg-slate-950 px-5 py-3 font-black text-white shadow-lg">Load Pasted CSV</button>
             <button type="button" onClick={function () { loadCloud(false); }} className="rounded-xl bg-amber-400 px-5 py-3 font-black text-slate-950 shadow-lg">Refresh From Cloud</button>
+            <button type="button" onClick={function () { refreshWeather(false); }} className="rounded-xl bg-blue-600 px-5 py-3 font-black text-white shadow-lg">Auto Update Date/Weather</button>
           </div>
           <div className={(connected ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900") + " mt-6 rounded-2xl p-4 font-black"}>{connected ? "Connected to Supabase for cross-computer live updates." : "Not connected yet. Add Supabase URL and anon key below."}</div>
         </section>
@@ -391,6 +433,8 @@ function slug(s) { return String(s).toLowerCase().split("").map(function (ch) { 
 function toIsoDate(year, month, day) { return String(year) + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0"); }
 function formatTimeParts(hour24, minute) { let h = hour24; const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12; return String(h) + ":" + String(minute).padStart(2, "0") + ":00 " + ap; }
 function formatDate(date) { return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }).toUpperCase(); }
+function todayIso() { const d = new Date(); return String(d.getFullYear()) + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+function weatherCodeLabel(code) { const c = Number(code); if (c === 0) return "Clear"; if ([1, 2].indexOf(c) >= 0) return "Partly Cloudy"; if (c === 3) return "Cloudy"; if ([45, 48].indexOf(c) >= 0) return "Fog"; if ([51, 53, 55, 56, 57].indexOf(c) >= 0) return "Drizzle"; if ([61, 63, 65, 66, 67, 80, 81, 82].indexOf(c) >= 0) return "Rain"; if ([71, 73, 75, 77, 85, 86].indexOf(c) >= 0) return "Snow"; if ([95, 96, 99].indexOf(c) >= 0) return "Thunderstorms"; return "Cloudy"; }
 function formatWeekday(date) { return date.toLocaleDateString("en-US", { weekday: "long" }).toUpperCase(); }
 function scoreRow(r) { let score = 0; if (r.sales_consultant && r.sales_consultant !== "VIP") score += 100; if (r.vehicle) score += 50; if (r.appt_ms) score += 25; if (String(r.source_type).toLowerCase().indexOf("walk-in") >= 0) score += 5; return score; }
 function clean(value) { return String(value == null ? "" : value).trim(); }
