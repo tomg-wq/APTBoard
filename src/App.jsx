@@ -7,6 +7,12 @@ const LOCAL_CHECKINS = "dk_live_checkins_v1";
 const ENV_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
 const ENV_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 const ENV_BOARD_ID = import.meta.env.VITE_BOARD_ID || "daytona-kia-main";
+const DEFAULT_LOGO_IMAGE = "https://i.imgur.com/IiJBlwa.png";
+const DEFAULT_TELLURIDE_IMAGE = "https://www.jalopnik.com/img/gallery/2027-kia-telluride-extends-its-reign-as-the-best-three-row-suv/intro-1773726755.jpg";
+const FEATURED_VEHICLES = [
+  { name: "2026 Kia Sportage", image: "https://www.kbb.com/wp-content/uploads/2024/11/2026-kia-sportage-interior.jpg" },
+  { name: "2026 Kia K4 Hatchback", image: "https://hips.hearstapps.com/hmg-prod/images/23146-2026-k4-hatchback-694983957d81e.jpg?crop=0.598xw:0.897xh;0.189xw,0&resize=1200:*" },
+];
 
 const defaultSettings = {
   boardId: ENV_BOARD_ID,
@@ -15,8 +21,8 @@ const defaultSettings = {
   condition: "Cloudy",
   location: "Daytona Beach, FL",
   vehicleSpotlight: "2027 Kia Telluride",
-  vehicleImage: "",
-  logoImage: "",
+  vehicleImage: DEFAULT_TELLURIDE_IMAGE,
+  logoImage: DEFAULT_LOGO_IMAGE,
   supabaseUrl: ENV_SUPABASE_URL,
   supabaseAnonKey: ENV_SUPABASE_ANON_KEY,
 };
@@ -71,8 +77,8 @@ export default function App() {
     const saved = readJson(LOCAL_SETTINGS, defaultSettings);
     return Object.assign({}, saved, {
       boardId: saved.boardId || ENV_BOARD_ID,
-      vehicleImage: saved.vehicleImage || "",
-      logoImage: saved.logoImage || "",
+      vehicleImage: saved.vehicleImage || DEFAULT_TELLURIDE_IMAGE,
+      logoImage: saved.logoImage || DEFAULT_LOGO_IMAGE,
       supabaseUrl: saved.supabaseUrl || ENV_SUPABASE_URL,
       supabaseAnonKey: saved.supabaseAnonKey || ENV_SUPABASE_ANON_KEY,
     });
@@ -380,7 +386,7 @@ function DisplayBoard({ rows, settings, boardDate, checkedCount, soldCount }) {
             </div>
           </div>
         </main>
-        <aside className="flex flex-col bg-slate-950 text-white"><div className="border-b border-white/20 p-8"><div className="flex items-center gap-8"><div className="text-6xl text-amber-400">◫</div><div><div className="text-3xl font-bold uppercase tracking-widest">{formatWeekday(boardDate)}</div><div className="mt-3 text-5xl font-black uppercase tracking-wider">{formatDate(boardDate)}</div></div></div></div><div className="relative flex-1 overflow-hidden bg-gradient-to-b from-slate-800 to-slate-950 p-8"><div className="flex items-center gap-8"><div className="text-7xl">{weatherIcon(settings.condition)}</div><div className="text-7xl font-black">{settings.temp}</div></div><div className="mt-4 text-2xl font-bold uppercase tracking-widest">{settings.location}</div><div className="mt-3 text-2xl font-bold uppercase tracking-widest">{settings.condition}</div><div className="mt-10 rounded-3xl bg-black/30 p-6 shadow-2xl ring-1 ring-white/10"><div className="text-sm uppercase tracking-[0.3em] text-amber-400">Live Status</div><div className="mt-4 text-5xl font-black">{checkedCount}/{rows.length}</div><div className="mt-2 text-lg font-bold uppercase tracking-widest text-white/80">Checked In</div><div className="mt-4 text-4xl font-black text-amber-400">{soldCount}</div><div className="mt-1 text-lg font-bold uppercase tracking-widest text-white/80">Sold</div></div><div className="absolute bottom-8 left-6 right-6 overflow-hidden rounded-3xl border border-white/10 bg-black/30 text-center shadow-xl">{settings.vehicleImage ? <img src={settings.vehicleImage} alt="Vehicle spotlight" className="h-80 w-full object-cover" /> : <div className="flex h-80 items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950 text-8xl">🚙</div>}<div className="bg-black/50 p-4 text-2xl font-black uppercase tracking-[0.18em]">{settings.vehicleSpotlight}</div></div></div></aside>
+        <aside className="flex flex-col bg-slate-950 text-white"><div className="border-b border-white/20 p-8"><div className="flex items-center gap-8"><div className="text-6xl text-amber-400">◫</div><div><div className="text-3xl font-bold uppercase tracking-widest">{formatWeekday(boardDate)}</div><div className="mt-3 text-5xl font-black uppercase tracking-wider">{formatDate(boardDate)}</div></div></div></div><div className="relative flex-1 overflow-hidden bg-gradient-to-b from-slate-800 to-slate-950 p-8"><div className="flex items-center gap-8"><div className="text-7xl">{weatherIcon(settings.condition)}</div><div className="text-7xl font-black">{settings.temp}</div></div><div className="mt-4 text-2xl font-bold uppercase tracking-widest">{settings.location}</div><div className="mt-3 text-2xl font-bold uppercase tracking-widest">{settings.condition}</div><div className="mt-10 rounded-3xl bg-black/30 p-6 shadow-2xl ring-1 ring-white/10"><div className="text-sm uppercase tracking-[0.3em] text-amber-400">Live Status</div><div className="mt-4 text-5xl font-black">{checkedCount}/{rows.length}</div><div className="mt-2 text-lg font-bold uppercase tracking-widest text-white/80">Checked In</div><div className="mt-4 text-4xl font-black text-amber-400">{soldCount}</div><div className="mt-1 text-lg font-bold uppercase tracking-widest text-white/80">Sold</div></div><div className="mt-6 rounded-3xl bg-black/30 p-5 shadow-2xl ring-1 ring-white/10"><div className="mb-4 text-sm font-black uppercase tracking-[0.28em] text-amber-400">Featured Vehicles</div><div className="grid gap-4">{FEATURED_VEHICLES.map(function (item) { return <div key={item.name} className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-xl"><img src={item.image} alt={item.name} className="h-28 w-full object-cover" /><div className="bg-black/50 px-4 py-3 text-center text-lg font-black uppercase tracking-[0.14em]">{item.name}</div></div>; })}</div></div><div className="absolute bottom-8 left-6 right-6 overflow-hidden rounded-3xl border border-white/10 bg-black/30 text-center shadow-xl">{settings.vehicleImage ? <img src={settings.vehicleImage} alt="Vehicle spotlight" className="h-64 w-full object-cover" /> : <div className="flex h-64 items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950 text-8xl">🚙</div>}<div className="bg-black/50 p-4 text-2xl font-black uppercase tracking-[0.18em]">{settings.vehicleSpotlight}</div></div></div></aside>
       </div>
       <footer className="grid h-[130px] grid-cols-[1fr_390px] items-center bg-slate-950 px-12 text-white"><div className="flex items-center gap-8"><div className="text-6xl text-amber-500">☆</div><div className="h-16 w-px bg-amber-500" /><div><div className="text-2xl font-bold uppercase tracking-[0.12em]">Thank you for choosing Daytona Kia! Please see reception upon arrival.</div><div className="mt-3 text-3xl font-black uppercase tracking-[0.13em] text-amber-500">We look forward to serving you!</div></div></div><div className="text-center text-3xl font-black italic uppercase tracking-[0.12em]">Movement That <span className="text-amber-500">Inspires</span></div></footer>
     </div>
