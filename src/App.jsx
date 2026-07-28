@@ -428,6 +428,9 @@ function parseCSV(text) {
 function normalizeRows(rawRows, selectedDateString, boardId) {
   const target = new Date(selectedDateString + "T00:00:00").getTime();
   const mapped = rawRows.map(function (r, index) {
+    const rowText = Object.values(r).join(" ").toLowerCase();
+    if (rowText.includes("xtream")) return null;
+
     const parsed = parseApptDate(r["Appt Date"]);
     const day = parsed ? new Date(parsed.year, parsed.month, parsed.day).getTime() : null;
     const salesRaw = clean(r["Salesperson/User"]);
@@ -436,7 +439,7 @@ function normalizeRows(rawRows, selectedDateString, boardId) {
     const sales = salesRaw ? titleName(salesRaw) : "VIP";
     const vehicle = titleName(r.Vehicle);
     return { id: makeId(boardId, client, apptRaw, sales, vehicle), board_id: boardId, client_name: client, source_type: clean(r.Type), sales_consultant: sales, appt_raw: apptRaw, appt_ms: parsed ? parsed.date.getTime() : null, appt_date: parsed ? toIsoDate(parsed.year, parsed.month, parsed.day) : null, day: day, time_display: parsed ? formatTimeParts(parsed.hour, parsed.minute) : "", vehicle: vehicle, checked_in: false, checked_in_at: "", status: "pending", sort_order: index };
-  }).filter(function (r) { return r.client_name; }).filter(function (r) { return r.day === target || !r.appt_ms; });
+  }).filter(function (r) { return r && r.client_name; }).filter(function (r) { return r.day === target || !r.appt_ms; });
   const best = new Map();
   mapped.forEach(function (r) { const key = r.client_name.toLowerCase() + "|" + (r.appt_raw || "blank"); const old = best.get(key); if (!old || scoreRow(r) > scoreRow(old)) best.set(key, r); });
   return Array.from(best.values()).sort(function (a, b) { if (a.appt_ms && b.appt_ms) return a.appt_ms - b.appt_ms || a.client_name.localeCompare(b.client_name); if (a.appt_ms && !b.appt_ms) return -1; if (!a.appt_ms && b.appt_ms) return 1; return a.client_name.localeCompare(b.client_name); }).map(function (r, i) { return Object.assign({}, r, { sort_order: i }); });
