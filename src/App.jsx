@@ -429,7 +429,8 @@ function normalizeRows(rawRows, selectedDateString, boardId) {
   const target = new Date(selectedDateString + "T00:00:00").getTime();
   const mapped = rawRows.map(function (r, index) {
     const rowText = Object.values(r).join(" ").toLowerCase();
-    if (rowText.includes("xtream")) return null;
+    const compactRowText = rowText.replace(/[^a-z0-9]/g, "");
+    if (rowText.includes("xtream") || compactRowText.includes("nitrolead")) return null;
 
     const parsed = parseApptDate(r["Appt Date"]);
     const day = parsed ? new Date(parsed.year, parsed.month, parsed.day).getTime() : null;
